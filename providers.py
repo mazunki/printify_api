@@ -39,8 +39,6 @@ class Provider(Printify):
         if not req.ok:
             raise Exception("Failed to get shipping details for product id={product.id} on provider_id={self.id}")
         data = req.json()
-        # for variant in data.get("variants", {}):
-            # yield variant.get("id", None)
         return data
 
     def get_variants_for_product(self, product):

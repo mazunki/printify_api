@@ -6,10 +6,13 @@ import requests, json
 class Shipping(Printify):
     class Money:
         def __init__(self, amount, currency):
-            self.amount = amount
+            self.amount = amount/100
             self.currency = currency
         def __str__(self):
             return f"{self.amount} {self.currency}"
+
+        def __format__(self, fmt):
+            return fmt.format(self.currency) + " USD"
 
     class Profile:
         def __init__(self, profile: dict):
@@ -31,11 +34,17 @@ class Shipping(Printify):
 
     def __init__(self, shipping: dict):
         self.data = shipping
-        self.handling_time = self.data.get("handling_time", None)
+        self._handling_time = self.data.get("handling_time", {})
         self.profiles = { Shipping.Profile(p) for p in self.data.get("profiles", {}) }
         
     def profiles_in_country(self, country_code):
         return [ profile for profile in self.profiles if country_code in profile ]
+
+    @property
+    def handling_time(self):
+        time = self._handling_time.get("value", 0)
+        unit = self._handling_time.get("unit", "timeunits")
+        return f"{time} {unit}"
 
     def __str__(self):
         return str(self.profiles)

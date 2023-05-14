@@ -2,25 +2,34 @@
 
 from products import Product
 from providers import Provider
-import json
+import json, csv
 
 product_ids = Product.get_all_product_ids()
+fields = "ProductID", "ProductName", "ProviderName", "ShippingCost", "VariantCount", "Norway?", "HandlingTime"
 
-for id_ in product_ids:
-    try:
-        product = Product(id_)
-    except Warning as w:
-        print("Warning:", w)
-        continue
-    
-    product.fetch_data()
-    fmt = "{:>10} {:<60} {:<30} {:>12} {:>15}"
-    if product._providers:
-        if product.is_available_in("NO"):
-            print(product)
-            print(fmt.format("Product ID", "Product name", "Provider", "Cost", "Variant #"))
-            for provider, shipper in product.providers_in("NO"):
+def get_printify_data_for_csv():
+    for id_ in product_ids:
+        try:
+            product = Product(id_)
+        except Warning as w:
+            print("Warning:", w)
+            continue
+
+        product.fetch_data()
+        if product._providers:
+            for (provider, shipper) in product.shipping.items():
                 for profile in shipper:
-                    print(fmt.format(product.id, product.title, provider.title, str(profile.cost), len(profile.variants)))
+                    available_norway = "NO" in profile
+                    yield product.id, product.title, provider.title, profile.cost, len(profile.variants), available_norway, shipper.handling_time
 
 
+with open("printify.csv", "w") as f:
+    writer = csv.writer(f, delimiter=";")
+    writer.writerow(fields)
+
+
+for row in get_printify_data_for_csv():
+    with open("printify.csv", "a") as f:
+        writer = csv.writer(f, delimiter=";")
+        writer.writerow(row)
+    
