@@ -14,10 +14,13 @@ for id_ in product_ids:
         continue
     
     product.fetch_data()
+    fmt = "{:>10} {:<60} {:<30} {:>12} {:>15}"
     if product._providers:
-        for provider, shipping in product.shipping.items():
-            for profile in shipping.profiles_in_country("NO"):
-                print(product)
-                print("\t", provider, profile.get("first_item"), profile.get("countries"))
-        
+        if product.is_available_in("NO"):
+            print(product)
+            print(fmt.format("Product ID", "Product name", "Provider", "Cost", "Variant #"))
+            for provider, shipper in product.providers_in("NO"):
+                for profile in shipper:
+                    print(fmt.format(product.id, product.title, provider.title, str(profile.cost), len(profile.variants)))
+
 

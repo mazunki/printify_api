@@ -4,28 +4,52 @@ from providers import Provider
 import requests, json
 
 class Shipping(Printify):
+    class Money:
+        def __init__(self, amount, currency):
+            self.amount = amount
+            self.currency = currency
+        def __str__(self):
+            return f"{self.amount} {self.currency}"
+
+    class Profile:
+        def __init__(self, profile: dict):
+            self.variants = profile.get("variant_ids", [])
+            self.first_item = profile.get("first_item", {})
+            self.additional_items = profile.get("additional_items", {})
+            self.countries = profile.get("countries", [])
+
+        @property
+        def cost(self):
+            return Shipping.Money(self.first_item.get("cost"), self.first_item.get("currency"))
+
+        def __contains__(self, other):
+            return other in self.countries or "REST_OF_THE_WORLD" in self.countries
+
+        def __str__(self):
+            return f"{self.cost} ({len(self.variants)} variants)"
+
+
     def __init__(self, shipping: dict):
         self.data = shipping
         self.handling_time = self.data.get("handling_time", None)
-        self.profiles = self.data.get("profiles") or {}
+        self.profiles = { Shipping.Profile(p) for p in self.data.get("profiles", {}) }
         
     def profiles_in_country(self, country_code):
-        return [
-                profile
-                for profile in self.profiles
-                if country_code in profile.get("countries")
-                    or "REST_OF_THE_WORLD" in profile.get("countries")
-            ]
+        return [ profile for profile in self.profiles if country_code in profile ]
 
     def __str__(self):
         return str(self.profiles)
+
+    def __iter__(self):
+        for profile in self.profiles:
+            yield profile
 
 class Product(Printify):
     BASE_URL = f"{Printify.PRINTIFY_URL_BASE}/catalog"
     auth_keys = Printify.get_authorization()
     def __init__(self, id_):
         self.url = f"{self.BASE_URL}/blueprints/{id_}"
-        self.id_ = id_
+        self.id = id_
         self._providers = None
         self._blueprint = None
         self._variants = None
@@ -36,7 +60,8 @@ class Product(Printify):
 
         self.title = data.get("title", None)
         if not self.title:
-            raise Warning(f"No title found for item with id={id_}")
+            raise Warning(f"No title found for item with id={self.id}")
+
         self.description = data.get("description", None)
         self.brand = data.get("brand", None)
         self.model = data.get("model", None)
@@ -60,7 +85,22 @@ class Product(Printify):
         for provider in data:
             provider = Provider(provider["id"])
             self._providers.add(provider)
-            yield provider
+        return self._providers
+
+
+    def is_available_in(self, country_code):
+        for shipper in self.shipping.values():
+            if shipper.profiles_in_country(country_code):
+                return True
+        return False
+
+    def providers_in(self, country_code):
+        providers = set()
+        for provider, shipping_details in self.shipping.items():
+            if shipping_details.profiles_in_country(country_code):
+                providers.add((provider, shipping_details))
+        return providers
+
 
     @property
     def shipping(self):
@@ -71,7 +111,6 @@ class Product(Printify):
         for provider in self.providers:
             shipping = provider.get_shipping_for_product(self)
             self._shipping[provider] = Shipping(shipping)
-
         return self._shipping
 
     @property
@@ -83,7 +122,7 @@ class Product(Printify):
         for provider in self.providers:
             for variant in provider.get_variants_for_product(self):
                 self._variants.add(variant)
-                yield variant
+        return self._variants
 
     def __iter__(self):
         for item in self.variants:
@@ -99,5 +138,5 @@ class Product(Printify):
     def __str__(self):
         provider_s = f"{{{len(self._providers)} Provider...}}" if self._providers is not None else "{? Provider...}"
         variants_s = f'{{{len(self._variants)} id...}}' if self._variants is not None else "{? id...}"
-        return f"Product<id:{self.id_}, title:'{self.title}', brand:'{self.brand}', self.model:'{self.model}', variants:{variants_s}, providers:{provider_s}>"
+        return f"Product<id:{self.id}, title:'{self.title}', brand:'{self.brand}', self.model:'{self.model}', variants:{variants_s}, providers:{provider_s}>"
 
